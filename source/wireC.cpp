@@ -1,12 +1,12 @@
 #include "nds.h"
 #include <nds/arm9/sound.h>		// sound functions
 #include <nds/timers.h>		// timer functions
-#include <tileedit.h>
+#include "tileedit.h"
 #include <stdio.h>
 #include <string.h>
 #include <fat.h>
-#include <wireworldTS.h>
-#include <wireworld_controls.h>
+#include "wireworldTS.h"
+#include "wireworld_controls.h"
 #include "DSding_raw.h"
 #include "DSload_raw.h"
 #include "DSkill_raw.h"
@@ -40,6 +40,17 @@ touchPosition tp;
 #define TIL_WIRE (RGB15(31,25,9))
 #define abs(x) ((x)>0?(x):-(x))
 #define xy2m(x,y) ((x) + ((y)*128))
+
+
+// playGenericSound(DSnew_raw, DSnew_raw_size);
+/*	setGenericSound(	22050,
+						127,
+						64,
+						1 ); */
+static void playGenericSound(const void *data, u32 len)
+{
+	soundPlaySample(data, SoundFormat_16Bit, len, 22050, 127, 64, false, 0);
+}
 
 // eKid's profiling functions
 inline void startProfile()
@@ -81,7 +92,8 @@ inline void ShowDec(int wah)
 {
  lcdSwap();
  BG_PALETTE_SUB[255] = RGB15(31,31,31);
- consoleInitDefault((u16*)SCREEN_BASE_BLOCK_SUB(0), (u16*)CHAR_BASE_BLOCK_SUB(1), 16);
+ // consoleInitDefault((u16*)SCREEN_BASE_BLOCK_SUB(0), (u16*)CHAR_BASE_BLOCK_SUB(1), 16);
+ consoleDemoInit();
  iprintf("%d cycles",wah);
  while(1)
  {
@@ -93,7 +105,7 @@ inline void ShowErr(char errshow[])
 {
  lcdSwap();
  BG_PALETTE_SUB[255] = RGB15(31,31,31);
- consoleInitDefault((u16*)SCREEN_BASE_BLOCK_SUB(0), (u16*)CHAR_BASE_BLOCK_SUB(1), 16);
+ consoleDemoInit();
  iprintf("ERROR! ");
  iprintf(errshow);
  while(1)
@@ -146,13 +158,17 @@ inline void ClearMap(int plsnd)
  }
 }
 
-inline void ReadWWMap(int plsnd)
+inline bool ReadWWMap(int plsnd)
 {
-	if (FATresult == 0)
-	 ShowErr("DLDI couldn't load.");
-    else if( (testfile = fopen("/wireworld.txt", "r")) == NULL)
-	 ShowErr("Can't open wireworld.txt.");
-    else
+    if (FATresult == 0) {
+	ClearMap(0);
+	return false;
+	 // ShowErr("DLDI couldn't load.");
+    } else if( (testfile = fopen("/wireworld.txt", "r")) == NULL) {
+	ClearMap(0);
+	return false;
+	 // ShowErr("Can't open wireworld.txt.");
+    } else {
       ClearMap(0);
 	  u32 readp;
 	  readp = 0;
@@ -169,6 +185,8 @@ inline void ReadWWMap(int plsnd)
  {
   playGenericSound(DSload_raw, DSload_raw_size);
   VBLwait(6);
+ }
+ return true;
  }
 }
 
@@ -396,7 +414,7 @@ inline void KeyCheck(void)
 /* checking for editor touch */
 oldtx = tp.px;
 oldty = tp.py;
-tp = touchReadXY();
+touchRead(&tp);
 if ((oldtx == 0) && (oldty == 0))
  {
   oldtx = tp.px;
@@ -533,35 +551,32 @@ inline void setScrPos(void)
 {
  s32 ScrTmp = (((edwy + 20) - 64) / 2);
  if (ScrTmp < 0)
-  BG3_CY = 0;
+  REG_BG3Y = 0;
  else
-  BG3_CY = (ScrTmp << 8);
+  REG_BG3Y = (ScrTmp << 8);
 }
 
 int main(void)
 {
 	// irqs are nice
-	irqInit();
-	irqSet(IRQ_VBLANK, 0);
-	irqEnable(IRQ_VBLANK);
+//	irqInit();
+//	irqSet(IRQ_VBLANK, 0);
+//	irqEnable(IRQ_VBLANK);
 	videoSetMode(MODE_0_2D | DISPLAY_BG0_ACTIVE);
 	videoSetModeSub(MODE_0_2D | DISPLAY_BG0_ACTIVE);
 	vramSetBankA(VRAM_A_MAIN_BG);
 	vramSetBankC(VRAM_C_SUB_BG); 
-  	SUB_BG0_CR = BG_32x32 | BG_COLOR_16 | BG_MAP_BASE(0) | BG_TILE_BASE(1);
- 	BG0_CR = BG_32x32 | BG_COLOR_16 | BG_MAP_BASE(2) | BG_TILE_BASE(3);
+  	REG_BG0CNT_SUB = BG_32x32 | BG_COLOR_16 | BG_MAP_BASE(0) | BG_TILE_BASE(1);
+ 	REG_BG0CNT = BG_32x32 | BG_COLOR_16 | BG_MAP_BASE(2) | BG_TILE_BASE(3);
     lcdSwap();
     loadTitleData();
+    soundEnable();
 	bool wasSTART = false;
 	dospd = 5;
-	setGenericSound(	22050,
-						127,
-						64,
-						1 );
 	do
      {
 	    scanKeys();
-		tp = touchReadXY();
+            touchRead(&tp);
 	    if (keysDown() & KEY_START) wasSTART = true;
 		else if ((keysDown() & KEY_TOUCH) && (tp.px > 3) && (tp.px < 254) && (tp.py < 190) && (tp.py > 3))
 		 wasSTART = true;
@@ -571,7 +586,7 @@ int main(void)
 	playGenericSound(DSding_raw, DSding_raw_size);
 	
     memset32((void*)VRAM_A, 0, 32768);
-	BG0_CR = 0;		
+	REG_BG0CNT = 0;		
 	videoSetMode(MODE_5_2D | DISPLAY_BG3_ACTIVE);	
     lcdSwap();
 	loadMainData();
@@ -580,17 +595,17 @@ int main(void)
 	FATresult = fatInitDefault();
 	ReadWWMap(0);
    #endif
-	BG3_CR = BG_BMP8_256x256;
+	REG_BG3CNT = BG_BMP8_256x256;
 	BG_PALETTE[' '] = 0;
     BG_PALETTE['#'] = TIL_SPARK;
 	BG_PALETTE['='] = TIL_WIRE;
 	BG_PALETTE['-'] = TIL_TAIL;
-	BG3_XDX = 1 << 7;
-	BG3_YDY = 1 << 7;
-	BG3_XDY = 0;
-	BG3_YDX = 0;
-	BG3_CX = 0;
-	BG3_CY = 0;
+	REG_BG3PA = 1 << 7;
+	REG_BG3PD = 1 << 7;
+	REG_BG3PB = 0;
+	REG_BG3PC = 0;
+	REG_BG3X = 0;
+	REG_BG3Y = 0;
 	for (int t=0; t<640; t++)
 	 bg0map[t] = 3;
 	for (int t=640; t<768; t++)
@@ -612,5 +627,6 @@ while(1)
   }
  if (ison == 1) GenMake();
  }
+soundDisable();
 return 0;
 }
