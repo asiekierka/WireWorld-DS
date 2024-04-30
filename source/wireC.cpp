@@ -11,7 +11,6 @@
 #include "DSload_raw.h"
 #include "DSkill_raw.h"
 #include "DSnew_raw.h"
-#include "tonc_memfunc.h"
 #define DLDI_BUILD
 #define wm_x 128
 #define wm_y 128
@@ -20,7 +19,15 @@
 char maparr[wm_x*wm_y];
 char maparr_bk[wm_x*wm_y];
 char maparr_sav[wm_x*wm_y];
- 
+
+#ifdef __BLOCKSDS__
+#define iprintf printf
+#define memcpy32(a,b,c) memcpy(a,b,c*4)
+#define memset32(a,b,c) memset(a,b,c*4)
+#else
+#include "tonc_memfunc.h"
+#endif
+
 #define bg0map ((u16*)BG_TILE_RAM_SUB(0))
 char charcol;
 int dospd,issavst,ison,arrx,arry,edwx,edwy,refscr;
@@ -172,8 +179,6 @@ inline bool ReadWWMap(int plsnd)
       ClearMap(0);
 	  u32 readp;
 	  readp = 0;
-	  char rdchr;
-	  rdchr = ' ';
 	  while (feof(testfile) == false)
 	   {
 	    maparr[readp] = fgetc(testfile);
@@ -309,7 +314,7 @@ inline void KillElectrons(void)
 
 inline void GenWindow(void)
 {
-int mapSpot = (3 || (3 << 8) || (3 << 16) || (3 << 24));
+int mapSpot = (3 | (3 << 8) | (3 << 16) | (3 << 24));
 memset((void*)bg0map, mapSpot, 1280);
 mapSpot = 0;
 char arrSpot = ' ';
